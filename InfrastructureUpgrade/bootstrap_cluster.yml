@@ -1,0 +1,177 @@
+---
+- hosts: nomad_instances
+  become: yes
+  pre_tasks:
+    - name: Disable firewall
+      service: name=ufw state=stopped
+
+    - name: Install CA certificates
+      apt: name=ca-certificates update_cache=yes state=present 
+
+    - name: Install curl
+      apt: name=curl update_cache=yes
+    
+    - name: Install git
+      apt: name=git update_cache=yes
+
+    - name: Install zip and unzip
+      apt: name={{ item }} update_cache=yes
+      with_items:
+      - zip
+      - unzip
+      - redis-server
+
+    - name: Install pip
+      apt: name=python3-pip update_cache=yes
+
+    - name: Install python-netaddr
+      pip: name=netaddr
+
+    - name: Install spc
+      apt: name=software-properties-common update_cache=yes
+
+    - name: Install http
+      apt: name=apt-transport-https update_cache=yes
+
+    #- name: create new user
+    #  shell: useradd -m ubuntu
+
+    - name: create user
+      user:
+        name: ubuntu
+
+    - name: su ubuntu
+      shell: su ubuntu
+
+    - name: Update apt
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Add source key for nodejs
+      apt_key:
+        url: "https://deb.nodesource.com/gpgkey/nodesource.gpg.key"
+        state: present
+      register: first_run
+
+    - name: Add source repo for nodejs with deb
+      apt_repository:
+        repo: "deb https://deb.nodesource.com/node_8.x xenial main"
+        state: present
+        update_cache: yes
+
+    - name: Install dependencies
+      apt:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - mongodb
+        - nodejs
+
+    - name: install pymongo
+      pip:
+        name: pymongo
+        state: present
+
+    - name: add mongo user credentials
+      mongodb_user:
+        database: admin
+        name: "mongo"
+        password: "mongo"
+        roles: userAdminAnyDatabase
+        state: present
+
+    - name: Restart mongo db
+      service:
+        name: mongodb
+        state: restarted
+
+    - name: clone the checkbox repo during jenkins provision job
+      git:
+        repo: https://github.com/bhushan9/checkbox.io
+        dest: /home/ubuntu/checkbox
+        force: yes
+        update: yes
+
+    - name: check if shell script exists
+      file: 
+        path: /home/ubuntu/script.sh
+        state: absent
+
+    - name: create a shell script file
+      file: 
+        path: /home/ubuntu/script.sh
+        mode: a+x
+        state: touch
+
+    - name: create shell script
+      blockinfile: 
+        path: /home/ubuntu/script.sh 
+        block: |
+           #!/bin/bash
+           redis-server 2>&1 &
+           apt-get install nginx -y
+           cp /home/ubuntu/checkbox/local-conf/default /etc/nginx/sites-available/default
+           cp /home/ubuntu/checkbox/local-conf/nginx.conf /etc/nginx/nginx.conf
+           service nginx restart
+           cd /home/ubuntu/checkbox/server-side/site
+           npm install
+           env MONGO_PORT=3002 MONGO_IP=localhost MONGO_USER="mongo" MONGO_PASSWORD="mongo" node server.js
+        marker: ""
+      
+#     - name: start redis-server
+#       shell: redis-server
+
+#    - name: configure nginx defaults
+#      copy:
+#        src: /home/ubuntu/checkbox/local-conf/default
+#        dest: /etc/nginx/sites-available/default
+#        force: yes
+#        remote_src: True 
+
+#    - name: nginx configuration copy
+#      copy:
+#        src: /home/ubuntu/checkbox/local-conf/nginx.conf
+#        dest: /etc/nginx/nginx.conf
+#        force: yes
+#        remote_src: True 
+#
+#    - name: nginx restart
+#      service:
+#        name: nginx
+#        state: restarted
+
+#    - name: npm install
+#      npm:
+#        path: /home/ubuntu/checkbox/server-side/site/
+#        state: present
+
+
+    - name: Add GPG docker
+      apt_key: url=https://download.docker.com/linux/ubuntu/gpg state=present
+
+    - name: Add Docker repo
+      apt_repository: repo="deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable" state=present
+  
+    - name: Install Docker
+      apt: name=docker-ce state=present update_cache=yes
+
+    - name: Start docker
+      service: name=docker state=started enabled=yes
+
+    - name: add user permissions
+      command: usermod -aG docker root
+
+    - name: Install docker-py
+      pip: name=docker-py
+
+    - name: pulling docker image
+      docker_image: name=node tag=8
+
+
+  roles:
+    - role: brianshumate.nomad
+      nomad_bind_address: 0.0.0.0
+      nomad_docker_enable: yes
+      nomad_options: 
+        driver.raw_exec.enable : "1"

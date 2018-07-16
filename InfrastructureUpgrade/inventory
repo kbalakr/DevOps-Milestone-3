@@ -1,0 +1,9 @@
+# BEGIN ANSIBLE MANAGED BLOCK
+[nomad_instances]
+
+nomad1 ansible_user=root ansible_ssh_private_key_file="/root/.ssh/id_rsa" host_key_checking=false nomad_node_role=server nomad_iface=eth0 consul_node_role=bootstrap consul_iface=eth0 consul_client_address=192.241.157.138 ansible_host=192.241.157.138 ansible_python_interpreter=/usr/bin/python3
+
+nomad2 ansible_user=root ansible_ssh_private_key_file="/root/.ssh/id_rsa" host_key_checking=false nomad_node_role=client nomad_iface=eth0 consul_node_role=bootstrap consul_iface=eth0 consul_client_address=159.203.191.158 ansible_host=159.203.191.158 ansible_python_interpreter=/usr/bin/python3
+
+nomad3 ansible_user=root ansible_ssh_private_key_file="/root/.ssh/id_rsa" host_key_checking=false nomad_node_role=client nomad_iface=eth0 consul_node_role=bootstrap consul_iface=eth0 consul_client_address=192.241.128.75 ansible_host=192.241.128.75 ansible_python_interpreter=/usr/bin/python3
+# END ANSIBLE MANAGED BLOCK

@@ -1,0 +1,119 @@
+---
+- hosts: localhost
+  #become: yes
+
+  tasks: 
+
+    - name: Get vault credentials
+      include_vars:
+        file: secrets.yml
+        name: secrets
+
+    - name: Install python pip
+      apt: name=python-pip update_cache=yes
+      become: yes
+
+    - name: install zip and unzip
+      apt: name={{ item }} update_cache=yes
+      with_items:
+      - zip
+      - unzip
+
+    - name: Install python dopy
+      pip: name=dopy executable=pip
+      become: yes
+
+    - name: create keygen
+      user: name=root generate_ssh_key=true
+
+    - name: copying contents of pub key
+      command: cat {{ansible_env.HOME}}/.ssh/id_rsa.pub
+      register: public_key
+
+    #- name: print
+    #  debug:
+    #    msg: '{{ result.stdout }}'
+
+    - name: Deploy public key
+      digital_ocean: >
+        state=present
+        command=ssh
+        name=my_ssh_key
+        api_token={{ secrets['api'] }}
+        ssh_pub_key="{{ public_key.stdout }}"
+      register: do_droplet
+
+    - name: Create nomad1 droplet
+      digital_ocean: >
+        state=present
+        name=nomad1
+        command=droplet
+        api_token={{secrets['api']}}
+        size_id=2gb
+        ssh_key_ids="{{ do_droplet.ssh_key.id }}"
+        region_id=nyc1
+        image_id=ubuntu-16-04-x64
+
+      register: nomad1
+
+    - name: Create nomad2 droplet
+      digital_ocean: >
+        state=present
+        name=nomad2
+        command=droplet
+        api_token="{{ secrets['api'] }}"
+        size_id=2gb
+        ssh_key_ids="{{ do_droplet.ssh_key.id }}"
+        region_id=nyc1
+        image_id=ubuntu-16-04-x64
+
+      register: nomad2
+
+    - name: Create nomad3 droplet
+      digital_ocean: >
+        state=present
+        name=nomad3
+        command=droplet
+        api_token="{{ secrets['api'] }}"
+        size_id=2gb
+        ssh_key_ids="{{ do_droplet.ssh_key.id }}"
+        region_id=nyc1
+        image_id=ubuntu-16-04-x64
+
+      register: nomad3
+
+    #- name: print
+    #  debug:
+    #    msg: 'control: {{ control.droplet.ip_address }} \n nomad1: {{ nomad1.droplet.ip_address }} \n nomad2: {{ nomad2.droplet.ip_address }} \n nomad3: {{ nomad3.droplet.ip_address }} \n'      
+
+    - name: creating inventory file
+      file:
+        path: "{{ ansible_env.HOME }}/M3/inventory"
+        state: absent
+
+
+    - name: creating inventory file
+      file:
+        path: "{{ ansible_env.HOME }}/M3/inventory"
+        mode: 0666
+        state: touch
+
+    - name: Adding into inventory file
+      blockinfile:
+        path: "{{ ansible_env.HOME }}/M3/inventory"
+        block: |
+          [nomad_instances]
+
+          nomad1 ansible_user=root ansible_ssh_private_key_file="{{ansible_env.HOME}}/.ssh/id_rsa" host_key_checking=false nomad_node_role=server nomad_iface=eth0 consul_node_role=bootstrap consul_iface=eth0 consul_client_address={{nomad1.droplet.ip_address}} ansible_host={{nomad1.droplet.ip_address}} ansible_python_interpreter=/usr/bin/python3
+
+          nomad2 ansible_user=root ansible_ssh_private_key_file="{{ansible_env.HOME}}/.ssh/id_rsa" host_key_checking=false nomad_node_role=client nomad_iface=eth0 consul_node_role=bootstrap consul_iface=eth0 consul_client_address={{nomad2.droplet.ip_address}} ansible_host={{nomad2.droplet.ip_address}} ansible_python_interpreter=/usr/bin/python3
+
+          nomad3 ansible_user=root ansible_ssh_private_key_file="{{ansible_env.HOME}}/.ssh/id_rsa" host_key_checking=false nomad_node_role=client nomad_iface=eth0 consul_node_role=bootstrap consul_iface=eth0 consul_client_address={{nomad3.droplet.ip_address}} ansible_host={{nomad3.droplet.ip_address}} ansible_python_interpreter=/usr/bin/python3
+
+    - name: Install python netaddr
+      pip: name=netaddr
+      become: yes
+
+    - name: Install roles
+      command: ansible-galaxy install -r requirements.yml
+
